@@ -137,7 +137,6 @@ class GaussianDiffusion(tf.keras.Model):
 
     @tf.function(reduce_retracing=True)
     def ddim(self, x, t, context_output, clip_denoised, eta=0):
-        print("tracing check def ddim(self, x, t,")
         if self.denoise_fn.embd_type == "01":
             #asdf = tf.gather(self.index,t)
             tt = tf.expand_dims(tf.cast(tf.gather(self.index, t), tf.float32), -1) / self.n_denoising_steps_float
@@ -163,12 +162,10 @@ class GaussianDiffusion(tf.keras.Model):
 
     @tf.function(reduce_retracing=True)
     def p_sample(self, x, t, context_output, clip_denoised, eta=0):
-        print("tracing check p_sample")
         return self.ddim(x, t, context_output, clip_denoised, eta)
 
     @tf.function(reduce_retracing=True)
     def p_sample_loop(self, shape, context_output, clip_denoised=False, init=None, eta=0):
-        print("tracing check p_sample_loop")
         b = shape[0]
         img = tf.zeros(shape) if init is None else init
         for i in tqdm(reversed(range(self.sample_steps)), desc="sampling loop time step", total=self.sample_steps, disable=True):
@@ -231,14 +228,12 @@ class GaussianDiffusion(tf.keras.Model):
 
     @tf.function(reduce_retracing=True)
     def q_sample(self, x_start, t, noise):
-        print("tracing check q_sample")
         sample = (extract(self.train_sqrt_alphas_cumprod, t, batch_size=self.batch_size, x_shape=self.x_start_shape) * x_start
                   + extract(self.train_sqrt_one_minus_alphas_cumprod, t, batch_size=self.batch_size, x_shape=self.x_start_shape) * noise)
         return sample
 
     @tf.function(reduce_retracing=True)
     def p_losses(self, x_start, context_output, t):
-        print("tracing check p_losses")
         noise = tf.random.normal(shape=self.x_start_shape)
         x_noisy = self.q_sample(x_start, t, noise)
 
@@ -290,7 +285,6 @@ class GaussianDiffusion(tf.keras.Model):
     @tf.function(reduce_retracing=True)
     def call(self, images, input_snr = None):
         # B, C, H, W = self.img_batch_shape
-        print("tracing check denoising_diffusion call")
         B = self.batch_size #tf.shape(images)[0]
         t = tf.random.uniform([B], minval=0, maxval=self.n_denoising_steps, dtype=tf.int32)
 
@@ -350,4 +344,3 @@ class GaussianDiffusion(tf.keras.Model):
         # loss = self.p_losses(target_img, context_dict_output, t)#, aux_img=images)
 
         return loss #, context_dict_a_loss #self.get_extra_loss()
-

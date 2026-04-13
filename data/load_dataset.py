@@ -24,9 +24,9 @@ def load_dataset(data_config):
     dataset_name = dataset_name.lower()  # cast dataset_name to lower case
 
     if dataset_name == "cost2100_outdoor":
-        from .datasets import cost2100
+        from .datasets import jscc_cost2100
 
-        train, val, data_generator = cost2100.get_cost_2100_dataset(data_path=data_path)
+        train, val, data_generator = jscc_cost2100.get_cost2100_outdoor_dataset(data_path=data_path)
 
     elif dataset_name == "cdl":
         train, val = None, None
@@ -36,10 +36,6 @@ def load_dataset(data_config):
     elif dataset_name == "jscc":
         from .datasets import jscc
         train, val, data_generator = jscc.get_jscc_dataset(data_path=data_path)  
-
-    elif dataset_name == "jscc_cost2100":
-        from .datasets import jscc_cost2100
-        train, val, data_generator = jscc_cost2100.get_jscc_cost2100_dataset(data_path=data_path)
 
     elif dataset_name == "jscc_complex":
         from .datasets import jscc_complex

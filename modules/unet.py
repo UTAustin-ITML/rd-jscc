@@ -69,7 +69,6 @@ class LayerNorm(tf.keras.layers.Layer):
 
     @tf.function(reduce_retracing=True)
     def call(self, x):
-        print("tracing check LayerNorm def call(self, x)")
         var = tf.math.reduce_variance(x, axis=1, keepdims=True)
         mean = tf.reduce_mean(x, axis=1, keepdims=True)
         return (x - mean) / tf.sqrt(var + self.eps) * self.g + self.b
@@ -576,11 +575,9 @@ class Unet(Model):
 
     @tf.function(reduce_retracing=True)
     def call(self, x, time=None, context_output=None):
-        print("tracing check unet call")
         t = self.time_mlp(time) if exists(self.time_mlp) else None
         #original_x = x
         x, h = self.encode(x, t, context_output)
         x = self.decode(x, h, t)
         return x #self.decode(x, h, t)
-
 

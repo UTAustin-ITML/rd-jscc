@@ -6,7 +6,7 @@ import logging, io
 from pathlib import Path
 from tensorflow.keras.optimizers import Adam, AdamW
 from tensorflow.keras.optimizers.schedules import LearningRateSchedule
-from tensorflow.keras.mixed_precision import global_policy as mixed_precision
+from tensorflow.keras import mixed_precision
 import time
 from tensorflow.python.profiler.model_analyzer import profile
 from tensorflow.python.profiler.option_builder import ProfileOptionBuilder
@@ -95,13 +95,19 @@ class Trainer(object):
             
         self.batch_size = 1
         if hasattr(self, 'data_generator'):
-            input_shape = self.data_generator.get_batch().shape
-            self.model.build(input_shape)
+            sample_batch = self.data_generator.get_batch()
+            input_shape = sample_batch.shape
             self.batch_size = input_shape[0]
         else:
-            input_shape = next(self.train_dl).shape
-            self.model.build(input_shape)
+            sample_batch = next(self.train_dl)
+            input_shape = sample_batch.shape
             self.batch_size = input_shape[0]
+
+        # Build variables with a real forward pass. GaussianDiffusion does not
+        # implement build(), so model.build(input_shape) marks it built without
+        # creating sublayer weights and produces a misleading zero-parameter
+        # summary.
+        _ = self.model(sample_batch)
             
         # Capture and log model summary
         stream = io.StringIO()
@@ -157,6 +163,18 @@ class Trainer(object):
                 }
             )
 
+    @staticmethod
+    def _optimizer_variables(trainable_variables):
+        # Keras 3 may expose backend Variable wrappers here, while raw
+        # tf.GradientTape expects underlying ResourceVariables. Some wrappers
+        # expose `.value` as a method instead of a property, so normalize both.
+        optimizer_variables = []
+        for var in trainable_variables:
+            value = getattr(var, "value", None)
+            if callable(value):
+                value = value()
+            optimizer_variables.append(value if isinstance(value, tf.Variable) else var)
+        return optimizer_variables
 
 
     def save(self):
@@ -188,7 +206,9 @@ class Trainer(object):
 
     @tf.function(reduce_retracing=True)
     def update(self, data):
-        print("tracing check def update(self, data)")
+        trainable_vars = list(self.model.trainable_variables)
+        opt_vars = self._optimizer_variables(trainable_vars)
+
         with tf.GradientTape() as tape:
             # loss, aloss = self.model(data * 2.0 - 1.0, training=True)
             
@@ -204,16 +224,20 @@ class Trainer(object):
             else:
                 scaled_loss = total_loss
 
-        gradients = tape.gradient(scaled_loss, self.model.trainable_variables)
+        gradients = tape.gradient(
+            scaled_loss,
+            opt_vars,
+            unconnected_gradients=tf.UnconnectedGradients.ZERO,
+        )
 
         if self.scaler:
             scaled_gradients = self.scaler.get_unscaled_gradients(gradients)
             gradients = [tf.clip_by_norm(grad, 1.0) for grad in scaled_gradients]
-            self.scaler.apply_gradients(zip(gradients, self.model.trainable_variables))
+            self.scaler.apply_gradients(zip(gradients, opt_vars))
             self.scaler.update()
         else:
             gradients = [tf.clip_by_norm(grad, 1.0) for grad in gradients]
-            self.opt.apply_gradients(zip(gradients, self.model.trainable_variables))
+            self.opt.apply_gradients(zip(gradients, opt_vars))
 
         return loss #, aloss
 

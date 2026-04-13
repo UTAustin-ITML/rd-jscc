@@ -65,7 +65,6 @@ class LayerNorm(tf.keras.layers.Layer):
 
     @tf.function(reduce_retracing=True)
     def call(self, x):
-        print("tracing check LayerNorm def call(self, x)")
         var = tf.math.reduce_variance(x, axis=1, keepdims=True)
         mean = tf.reduce_mean(x, axis=1, keepdims=True)
         return (x - mean) / tf.sqrt(var + self.eps) * self.g + self.b

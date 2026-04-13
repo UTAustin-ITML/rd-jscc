@@ -23,14 +23,14 @@ def load_data(data_config, batch_size, num_workers=4, sequence=False):
         if sequence:
             train = train.map(train_transposed_collate, num_parallel_calls=num_workers)
         #train = train.cache().batch(batch_size).repeat().prefetch(tf.data.experimental.AUTOTUNE)
-        train = train.batch(batch_size).cache().repeat().prefetch(tf.data.experimental.AUTOTUNE)
+        train = train.batch(batch_size, drop_remainder=True).cache().repeat().prefetch(tf.data.experimental.AUTOTUNE)
 
     if val is not None:
 
         if sequence:
             val = val.map(test_transposed_collate, num_parallel_calls=num_workers)
         #val = val.cache().batch(batch_size).repeat().prefetch(tf.data.experimental.AUTOTUNE)
-        val = val.batch(batch_size).cache().repeat().prefetch(tf.data.experimental.AUTOTUNE)
+        val = val.batch(batch_size, drop_remainder=True).cache().repeat().prefetch(tf.data.experimental.AUTOTUNE)
         #val = val.batch(batch_size)#.repeat()
 
     return train, val, data_generator

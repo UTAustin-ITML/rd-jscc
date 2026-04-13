@@ -4,24 +4,12 @@ import logging
 import random
 import math
 
-import numpy as np
-import tensorflow as tf
-from tensorflow import keras
-os.environ["WANDB_MODE"] = "disabled"
-WANDB_API_KEY="855ca832b5cbd3e8780e9d84965edc4df07b8f68"
-
 # @@@@@@@@@@@@@@@@@@add those to the pycharm configuration!!@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 os.environ["XLA_FLAGS"] = "--xla_gpu_cuda_data_dir=/home/sa53869/softwares/anaconda3/envs/nrx"
 # os.environ["XLA_FLAGS"]="--xla_gpu_cuda_data_dir=/home/heasung/anaconda3/envs/tf2_sionna"
 
 os.system('export LD_LIBRARY_PATH=/home/sa53869/softwares/anaconda3/envs/nrx/lib:$LD_LIBRARY_PATH')
 os.system('export PATH=$PATH:/home/sa53869/softwares/anaconda3/envs/nrx/bin')
-
-os.system('echo $PATH')
-
-dataset_path = "/mnt/Data/datasets/csi"
-
-import argparse
 
 parser = argparse.ArgumentParser(description="values from bash script")
 parser.add_argument("--gpu", type=int, default=0, help="cuda device id")
@@ -51,19 +39,16 @@ parser.add_argument("--batch_size", type=int, default=100)
 parser.add_argument('--pred_mode', type=str, default='x', help='prediction mode')
 parser.add_argument('--loss_type', type=str, default='l2', help='type of loss')
 parser.add_argument('--n_denoising_steps', type=int, default=4, help='number of iterations')
-# parser.add_argument('--sample_steps', type=int, default=4, help='number of steps for sampling (for validation)')
 parser.add_argument('--embed_dim', type=int, default=32, help='dimension of embedding')
 parser.add_argument('--embd_type', type=str, default="01", help='timestep embedding type')
 parser.add_argument('--dim_mults', type=int, nargs='+', default=[1, 2], help='dimension multipliers')
-# parser.add_argument('--dim_mults', type=int, nargs='+', default=[2, 4, 8, 16, 32], help='dimension multipliers')
 
 parser.add_argument('--context_dim_mults', type=int, nargs='+', default=[1, 2], help='context dimension multipliers')
 parser.add_argument('--reverse_context_dim_mults', type=int, nargs='+', default=[2, 1],
                     help='reverse context dimension multipliers')
 parser.add_argument('--context_channels', type=int, default=8, help='number of context channels')
-# parser.add_argument('--bandwidth', type=int, default=16, help='number of uplink subcarriers used for CSI feedback')
-parser.add_argument('--bandwidth', type=int, nargs='+', default=[256, 128, 64, 32, 16, 8], help='list of number of uplink subcarriers used for CSI feedback')
-parser.add_argument('--mrl_weights', type=float, nargs='+', default=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0], help='list of MRL weights')
+parser.add_argument('--bandwidth', type=int, nargs='+', default=[16], help='list of number of uplink subcarriers used for CSI feedback')
+parser.add_argument('--mrl_weights', type=float, nargs='+', default=[1.0], help='list of MRL weights')
 parser.add_argument('--use_weighted_loss', default=True, help='if use weighted loss')
 parser.add_argument('--weight_clip', type=int, default=5, help='snr clip for weighted loss')
 parser.add_argument('--use_mixed_precision', action='store_true', help='if use mixed precision')
@@ -75,43 +60,47 @@ parser.add_argument('--additional_note', type=str, default='', help='additional_
 parser.add_argument('--aux_loss_type', type=str, default='l2', help='type of auxiliary loss')
 parser.add_argument("--aux_weight", type=float, default=0, help="weight for aux loss")
 
-parser.add_argument("--data_root", type=str, default=dataset_path, help="root of dataset")
+parser.add_argument("--data_root", type=str, default="./datasets/", help="root of dataset")
 parser.add_argument("--use_aux_loss_weight_schedule", action="store_true", help="if use aux loss weight schedule")
 
-# parser.add_argument("--data_name", type=str, default="cost2100_outdoor", help="name of dataset", choices=["cost2100_outdoor", "cdl"])
-# parser.add_argument("--use_side_info", type=bool, default=False)
-
-parser.add_argument("--data_name", type=str, default="cost2100_outdoor", help="name of dataset", choices=["cost2100_outdoor", "cdl", "jscc", "jscc_cost2100", "jscc_complex"])
+parser.add_argument("--data_name", type=str, default="cost2100_outdoor", help="name of dataset", choices=["cost2100_outdoor", "quadriga_indoor"])
 parser.add_argument("--use_side_info", type=bool, default=False)
 parser.add_argument("--noisy_uplink", type=bool, default=True)
 
 config = parser.parse_args()
 
-gpu_num = int(config.gpu)
-os.environ["CUDA_VISIBLE_DEVICES"] = f"{gpu_num}"
-random_seed = config.random_seed
+# Configure the TensorFlow runtime before importing tensorflow.
+os.environ["CUDA_VISIBLE_DEVICES"] = str(config.gpu)
+os.environ["WANDB_MODE"] = "disabled"
+os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
+os.environ["PYTHONHASHSEED"] = str(config.random_seed)
 
-import random
-import tensorflow as tf
-
-gpus = tf.config.list_physical_devices('GPU')
-from tensorflow import keras
 import numpy as np
+import tensorflow as tf
+gpus = tf.config.list_physical_devices('GPU')
 
 tf.config.run_functions_eagerly(False)
 # tf.compat.v1.disable_eager_execution()
 
 
 # os.environ['TF_DETERMINISTIC_OPS'] = '1'
-os.environ['TF_CUDNN_DETERMINISTIC'] = '1'
-os.environ['PYTHONHASHSEED'] = str(random_seed)
 
 
 bw_str = "_".join(map(str, config.bandwidth))
 w_str = "_".join(map(str, config.mrl_weights))
 
+
+def _format_tag_value(value):
+    if isinstance(value, float):
+        return format(value, "g")
+    return str(value)
+
+
+def _format_tag_list(values):
+    return "-".join(_format_tag_value(value) for value in values)
+
 save_path = (
-    f"results_jsac_rebuttal_efficient_unet_eff/"
+    f"results/"
     f"enc_large_dec_med_unet_{len(config.dim_mults)}_steps_20_em_{config.embed_dim}/"
     f"bw_{bw_str}_w_{w_str}/"
     f"bs_{config.batch_size}_lr_{config.lr}_{config.final_lr}"
@@ -147,11 +136,7 @@ file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 # -----------------------------------
 
-# Echo PATH for debug
-os.system('echo $PATH')
-
 # Set GPU and seeds
-os.environ["CUDA_VISIBLE_DEVICES"] = f"{config.gpu}"
 random.seed(config.random_seed)
 tf.random.set_seed(config.random_seed)
 np.random.seed(config.random_seed)
@@ -184,12 +169,30 @@ data_config = {
     "img_hz_flip": False,
 }
 
-model_name = (
-    f"{data_config['dataset_name']}-{config.model}"
-    f"{'-N_v{}'.format(config.n_embeddings) if config.model == 'VQDiffusion' else '-N_cl{}'.format(config.n_cl_floats)}"
-    f"{'-sideinfo' if config.use_side_info else ''}"
-    f"{config.additional_note}"
-)
+model_name_parts = [
+    data_config["dataset_name"],
+    config.model.lower(),
+    f"bs{config.batch_size}",
+    f"steps{config.n_denoising_steps}",
+    f"dim{config.embed_dim}",
+    f"mults{_format_tag_list(config.dim_mults)}",
+    f"bw{_format_tag_list(config.bandwidth)}",
+    f"mrl{_format_tag_list(config.mrl_weights)}",
+    f"lr{_format_tag_value(config.lr)}-to-{_format_tag_value(config.final_lr)}",
+]
+
+if config.model == "VQDiffusion":
+    model_name_parts.append(f"vq{config.n_embeddings}")
+else:
+    model_name_parts.append(f"latent{config.n_cl_floats}")
+
+if config.use_side_info:
+    model_name_parts.append("sideinfo")
+
+if config.additional_note:
+    model_name_parts.append(config.additional_note.strip().replace(" ", "_"))
+
+model_name = "_".join(model_name_parts)
 
 print('model name:')
 print(model_name)
@@ -201,10 +204,10 @@ import math
 def schedule_func(step):
     initial_lr = config.lr  # 1e-4 from argument
     eta_min = config.final_lr#1e-6
-    T_max = int(config.n_train_steps/1000)  # Total steps for decay
+    T_max = max(1, int(config.n_train_steps/1000))  # Total steps for decay
     
-    # Clamp step to T_max
-    step = min(step, T_max)
+    # Keep the cosine schedule in a valid range for short smoke tests too.
+    step = max(0, min(step, T_max))
     
     # Cosine decay calculation
     progress = step / T_max
@@ -256,7 +259,7 @@ def main():
             context_fn=context_model,
             input_img_shape=input_img_shape,
             batch_size=config.batch_size,
-            n_denoising_steps=2,#config.n_denoising_steps,
+            n_denoising_steps=config.n_denoising_steps,
             loss_type=config.loss_type,
             pred_mode=config.pred_mode,
             aux_loss_weight=config.aux_weight,
@@ -279,7 +282,7 @@ def main():
     # Trainer setup
     trainer = Trainer(
         rank=config.gpu,
-        sample_steps=2,#config.n_denoising_steps,
+        sample_steps=config.n_denoising_steps,
         model=model,
         train_dl=train_data,
         val_dl=val_data,

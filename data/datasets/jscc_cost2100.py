@@ -5,11 +5,11 @@ import matplotlib.pyplot as plt
 from global_config import PROJECTS_DIRECTORY
 import scipy.io as sio
 
-def load_jscc_cost2100_dataset(data_path=None, mode="train", normalization=True, scenario="out"):
+def load_cost2100_outdoor_dataset(data_path=None, mode="train", normalization=True, scenario="out"):
 
     data_root = data_path
 
-    data_path_jscc = os.path.join(data_root, "jscc/")
+    data_path_jscc = os.path.join(data_root, "quadriga_indoor/")
     datapath_cost2100 = os.path.join(data_root, "COST2100_outdoor/")
 
     ### load cost2100 data ###
@@ -32,7 +32,7 @@ def load_jscc_cost2100_dataset(data_path=None, mode="train", normalization=True,
     test_dataset = tf.data.Dataset.from_tensor_slices(data_test)
 
     ### load JSCC data : For uplink, COST2100 data is missing. So use data from QuadriGa ###
-    data = np.load(os.path.join(data_path_jscc, "jscc_float32_var.npz"))
+    data = np.load(os.path.join(data_path_jscc, "quadriga_indoor.npz"))
     
     x_freq_train_downlink = data['x_train_downlink'] - 0.5  # (100, 256, 32, 2)
     x_freq_val_downlink = data['x_val_downlink'] - 0.5
@@ -126,9 +126,9 @@ def visualize_samples(datasets, labels, datasets_spatial_frequency, indices=[0, 
 
         plt.show()
 
-def get_jscc_cost2100_dataset(data_path=None, seed=42):
+def get_cost2100_outdoor_dataset(data_path=None, seed=42):
     # Load from the npy dataset and merge them all.
-    train_dataset, _, test_dataset, sideinfo_train_dataset, _ , sideinfo_test_dataset, _, _, x_freq_test_downlink,   = load_jscc_cost2100_dataset(data_path)
+    train_dataset, _, test_dataset, sideinfo_train_dataset, _ , sideinfo_test_dataset, _, _, x_freq_test_downlink,   = load_cost2100_outdoor_dataset(data_path)
     x_freq_test_downlink = np.transpose(x_freq_test_downlink, (0, 3, 1, 2))
 
     train_dataset = np.stack([train_dataset, train_dataset, sideinfo_train_dataset], axis=-1)
@@ -149,5 +149,5 @@ def get_jscc_cost2100_dataset(data_path=None, seed=42):
 
 if __name__ == "__main__":
     #tf_train_dataset, tf_test_dataset, _ = get_jscc_dataset(data_path=None, train=True, seed=1234, scenario="out")
-    train_dataset, _, test_dataset, sideinfo_train_dataset, _ , sideinfo_test_dataset = load_jscc_cost2100_dataset()
+    train_dataset, _, test_dataset, sideinfo_train_dataset, _ , sideinfo_test_dataset = load_cost2100_outdoor_dataset()
     visualize_samples(train_dataset, None, sideinfo_train_dataset)
